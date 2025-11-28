@@ -24,7 +24,6 @@ An automated high-frequency trading bot that parses Arabic and English trade sig
 Clone the repository and install dependencies:
 
 ```bash
-git clone [https://github.com/yourusername/mt5-signal-sniper.git](https://github.com/yourusername/mt5-signal-sniper.git)
 cd mt5-signal-sniper
 pip install -r requirements.txt
 ````
@@ -182,6 +181,3 @@ Once the bot is running, send these commands to your Admin Bot:
 
 Trading Forex/Crypto involves substantial risk. This software is provided "as is" without warranty of any kind. The author is not responsible for any financial losses incurred while using this bot. **Test thoroughly on a Demo account first.**
 
-```
-
-```
