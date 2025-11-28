@@ -1,36 +1,39 @@
-# Telegram-VIP-Signal-Auto-Trading-Bot-for-MT5
+# Telegram VIP Signal Auto-Trader for MetaTrader 5
 
-````markdown
-An automated high-frequency trading bot that parses Arabic and English trade signals from Telegram channels and executes them instantly on MetaTrader 5 (MT5).
-
-## ⚡ Features
-
-* **Unicode/Arabic Support:** specialized normalization to handle Right-to-Left (RTL) text and invisible formatting characters.
-* **Smart TP Selection:** Automatically chooses TP2 over TP1 if the risk/reward ratio is favorable.
-* **Equity Guard:** Hard-stop mechanism that disables trading if equity drops below a defined percentage.
-* **Spread Filter:** Prevents execution during high-spread news events.
-* **Telegram Control:** Full remote control via a private bot (Start, Stop, modify Lot Size/SL).
+An automated high-frequency trading bot that reads Arabic and English trade signals from Telegram channels and executes them on MetaTrader 5 (MT5) with minimal delay. Built for reliability: handles RTL text, filters risky conditions, and provides remote control via a private Telegram controller bot.
 
 ---
 
-## 🛠️ Installation
+## Key Features
 
-### 1. Prerequisites
-* **Python 3.8+**
-* **MetaTrader 5 Terminal:** Must be installed and **running** on the machine.
-* **Telegram Account:** To listen to the signal channel.
+* **Arabic & Unicode handling** — Normalizes Arabic text and removes invisible direction markers that break parsing.
+* **Smart target selection** — Chooses secondary profit target (TP2) automatically when its risk/reward profile is better than TP1.
+* **Equity protection** — Automatic hard stop that disables new trades when equity falls below a configurable threshold.
+* **Spread and news filter** — Blocks order execution during abnormally wide spreads or defined news events.
+* **Remote Telegram controller** — Start, stop, change lot size, set SL/safety limits, and close positions from a private bot.
+* **Lightweight and extensible** — Parsing rules live in one place (easy to update when signal format changes).
 
-### 2. Setup
-Clone the repository and install dependencies:
+---
+
+## Installation
+
+### Requirements
+
+* Python 3.8 or newer
+* MetaTrader 5 terminal installed and logged in on the same machine where the bot runs
+* Telegram account (for the listener) and a Telegram bot token (for remote control)
+
+### Setup
 
 ```bash
+git clone https://github.com/your/repo.git
 cd mt5-signal-sniper
 pip install -r requirements.txt
-````
+```
 
-*Create a `requirements.txt` with the following content if you haven't already:*
+Example `requirements.txt` (create if missing):
 
-```text
+```
 python-telegram-bot
 telethon
 MetaTrader5
@@ -38,146 +41,141 @@ python-dotenv
 asyncio
 ```
 
------
+---
 
-## 🔑 Configuration & Credentials
+## Configuration
 
-You must create a `.env` file in the root directory.
-
-### Step 1: Get Telegram API (The Listener)
-
-This allows the bot to "read" messages as your user account.
-
-1.  Go to [my.telegram.org](https://my.telegram.org) and login.
-2.  Select **API development tools**.
-3.  Create a new app. Copy the `API_ID` and `API_HASH`.
-
-### Step 2: Get Bot Token (The Controller)
-
-This is the interface you use to send commands.
-
-1.  Message **@BotFather** on Telegram.
-2.  Send `/newbot` and follow the instructions.
-3.  Copy the **HTTP API Token**.
-4.  Get your personal Chat ID by messaging **@userinfobot**.
-
-### Step 3: Configure `.env`
-
-Create a file named `.env` and fill in your details:
+Create a `.env` file in the repository root. Required variables:
 
 ```ini
-# LISTENER CREDENTIALS (my.telegram.org)
+# Listener (user account) credentials from my.telegram.org
 TELEGRAM_API_ID=12345678
-TELEGRAM_API_HASH=your_api_hash_here
+TELEGRAM_API_HASH=your_api_hash
 TELEGRAM_SESSION_NAME=sniper_session
 
-# CONTROLLER CREDENTIALS (BotFather)
-TELEGRAM_BOT_TOKEN=your_bot_token_here
-TELEGRAM_BOT_CHAT_IDS=123456789
+# Controller (BotFather) credentials
+TELEGRAM_BOT_TOKEN=your_bot_token
+TELEGRAM_BOT_CHAT_IDS=123456789,987654321
 
-# SIGNAL SOURCE
-# Use the included helper script to find Channel IDs (starts with -100)
+# Signal source (channel ID usually starts with -100)
 TELEGRAM_SOURCE_CHANNEL_ID=-100123456789
 
-# METATRADER 5 LOGIN
+# MetaTrader 5 credentials and path
 MT5_ACCOUNT=12345678
 MT5_PASSWORD=your_broker_password
 MT5_SERVER=Broker-Server
 MT5_PATH=C:\Program Files\MetaTrader 5\terminal64.exe
 ```
 
------
+* `TELEGRAM_API_ID` / `TELEGRAM_API_HASH`: Create at [https://my.telegram.org](https://my.telegram.org) → API development tools.
+* `TELEGRAM_BOT_TOKEN`: Create via @BotFather.
+* `TELEGRAM_BOT_CHAT_IDS`: Admin chat IDs allowed to control the bot. Obtain with @userinfobot.
+* `TELEGRAM_SOURCE_CHANNEL_ID`: Use the included helper script to resolve channel IDs if needed.
 
-## 🧠 Signal Detection Logic
+---
 
-The bot uses Python's `re` (Regular Expression) library to parse text. The logic is located in the `parse_signal` function.
+## Signal Parsing: how it works
 
-### How it Works
+Parsing logic resides in `parse_signal(message: str)`.
 
-1.  **Normalization:** Converts text to `NFKC` form to fix Arabic character encoding.
-2.  **Cleaning:** Removes invisible RTL markers (`\u200f`, `\u200e`) that break standard parsing.
-3.  **Extraction:** Uses Regex patterns to find keywords.
+Steps performed on every incoming message:
 
-### Modifying the Logic
+1. **Normalize**
+   Convert to Unicode Normalization Form KC (`NFKC`) to unify character variants (important for Arabic variations and Arabic-Indic digits).
 
-If your signal provider changes their format, you must edit the Regex patterns in `main.py`.
+2. **Clean**
+   Strip invisible Unicode markers used for RTL/LTR control (e.g., `\u200f`, `\u200e`) and other non-printing characters that break regex patterns.
 
-#### Example 1: Changing "Entry" Keyword
+3. **Tokenize & lower**
+   Convert to a predictable case and split into tokens for keyword detection while preserving numbers and decimal separators.
 
-**Current Code:**
+4. **Extract with Regex**
+   Use targeted regular expressions to locate: action (buy/sell), entry price, stop loss (SL), profit targets (TP1, TP2, …), and optional metadata (expiry, symbol, timeframe).
+
+5. **Validate**
+   Confirm prices are in a plausible range for the detected symbol and that required fields exist before sending to MT5.
+
+---
+
+## Common Regex examples & replacements
+
+Change patterns in `main.py` under `parse_signal` when the provider changes formatting.
+
+* Arabic entry (example):
 
 ```python
-# Looks for "الدخول:" followed by digits
 entry_match = re.search(r'الدخول:\s*(\d+\.?\d*)', message)
 ```
 
-**To change it to "Buy At":**
+* English entry (case-insensitive):
 
 ```python
-entry_match = re.search(r'Buy At\s*(\d+\.?\d*)', message, re.IGNORECASE)
+entry_match = re.search(r'Buy At\s*[:\-]?\s*(\d+\.?\d*)', message, re.IGNORECASE)
 ```
 
-#### Example 2: Changing TP Format
-
-**Current Code:**
+* TP bullet to alternative format:
 
 ```python
-# Looks for bullet point "• TP1:"
 tp1_match = re.search(r'•\s*TP1:\s*(\d+\.?\d*)', message)
+# To support "Target 1 - 1.2345":
+tp1_match = re.search(r'Target\s*1\s*[-:]\s*(\d+\.?\d*)', message, re.IGNORECASE)
 ```
 
-**To change it to "Target 1 -":**
+* Action keyword (Arabic & English):
 
 ```python
-tp1_match = re.search(r'Target 1\s*-\s*(\d+\.?\d*)', message)
+action_match = re.search(r'(شراء|بيع|BUY|SELL)', message, re.IGNORECASE)
 ```
 
-#### Example 3: Changing Action Keywords
+Keep numeric capture groups flexible: allow both dot and comma decimals when necessary, then normalize to dot `.` before converting to float.
 
-**Current Code:**
+---
 
-```python
-# Looks for Arabic Sell/Buy
-action_match = re.search(r'(شراء|بيع)', message)
+## Telegram Admin Commands
+
+Control the bot via the controller bot using these commands from authorized chat IDs:
+
+* `/start` — Enable live trading and signal processing.
+* `/stop` — Disable live trading (listener remains active but won’t execute orders).
+* `/status` — Return current balance, equity, opened trades, and settings.
+* `/baselot <size>` — Set the base lot size (e.g., `/baselot 0.1`).
+* `/safety <percent>` — Set equity drawdown protection (e.g., `/safety 30` to stop if equity drops 30%).
+* `/smarttargets` — Toggle the dynamic TP selection feature.
+* `/close` — Force-close all open positions immediately.
+
+---
+
+## Running the Bot
+
+1. Ensure MetaTrader 5 terminal is running and logged in.
+2. Start the script:
+
+```bash
+python main.py
 ```
 
-**To change it to English:**
+3. On first run, the listener will prompt for your phone number and the Telegram login code to create the session file specified by `TELEGRAM_SESSION_NAME`.
 
-```python
-# Looks for BUY or SELL (Case Insensitive)
-action_match = re.search(r'(BUY|SELL)', message, re.IGNORECASE)
-```
+---
 
------
+## Safety and testing
 
-## 📱 Telegram Commands
+* Always test on a demo account before enabling live trading.
+* Use conservative lot sizing while verifying parsing correctness and execution flow.
+* Monitor spread filters and news events during initial runs to tune thresholds.
+* Keep a separate logging channel or file for every signal and execution attempt for audit and debugging.
 
-Once the bot is running, send these commands to your Admin Bot:
+---
 
-| Command | Description |
-| :--- | :--- |
-| `/start` | Activate the bot (starts taking trades). |
-| `/stop` | Deactivate the bot (stops listening). |
-| `/status` | View current P\&L, balance, and settings. |
-| `/baselot 0.1` | Set the starting lot size. |
-| `/safety 30` | Set max equity drawdown to 30%. |
-| `/smarttargets` | Toggle dynamic TP selection. |
-| `/close` | Panic button: Close all open positions. |
+## Troubleshooting tips
 
------
+* **MT5 not connecting**: Confirm `MT5_PATH` points to the running terminal and that the account is logged in.
+* **Missed signals**: Check listener session validity and channel ID correctness; verify message text contains expected keywords.
+* **Parsing errors on RTL text**: Ensure normalization and invisible-character-stripping steps run before regex matching. Log the raw incoming message to inspect hidden characters.
+* **Orders rejected by broker**: Validate lot size, symbol notation, and available margin; check server name matches broker’s server string.
 
-## 🚀 Running the Bot
+---
 
-1.  Open the MT5 Terminal manually and login.
-2.  Run the script:
-    ```bash
-    python main.py
-    ```
-3.  **First Run Only:** You will be prompted in the console to enter your phone number and the Telegram login code to authorize the listener session.
+## License & Disclaimer
 
------
-
-## ⚠️ Disclaimer
-
-Trading Forex/Crypto involves substantial risk. This software is provided "as is" without warranty of any kind. The author is not responsible for any financial losses incurred while using this bot. **Test thoroughly on a Demo account first.**
-
+This software is provided without warranty. Trading involves risk; the author is not responsible for any losses incurred. Use the software at your own risk. Test thoroughly on demo accounts before trading with real funds.
